@@ -1,0 +1,15 @@
+{% extends "cohyda/base.html" %}
+{% load tethys_gizmos %}
+
+{# Contenido #}
+{% block app_content %}
+  <div>
+    <h2>Detalles de la estacion: </h2>
+  </div>
+  {% gizmo streamflow_serie_plot %}
+  {% gizmo waterlevel_serie_plot %}
+  {% gizmo curva_gasto_plot %}
+{% endblock %}
+
+{% block app_actions %}
+{% endblock %}
