@@ -7,6 +7,16 @@ from datetime import datetime, timedelta
 
 from .model import last_curvagasto, get_Q2H_H2Q
 
+"""
+############################################################
+                      helpers.py
+############################################################
+__author__  : jrc
+__version__ : Beta 0.1
+__obj__     : Additional functions for controller.py in tethys app
+__date__    : 01 - sep - 2022
+"""
+
 # Draw functions
 def create_time_serie(station_id,
                       obs,

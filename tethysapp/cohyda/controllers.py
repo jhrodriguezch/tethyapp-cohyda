@@ -10,6 +10,15 @@ import warnings
 from .model import Read_DataBase, historical_timeserie, get_Q2H_H2Q, data2dfserie
 from .helpers import *
 
+"""
+############################################################
+                      controller.py
+############################################################
+__author__  : jrc
+__version__ : Beta 0.1
+__obj__     : Controller python file for tethys app
+__date__    : 01 - sep - 2022
+"""
 
 ############ Secundary functions #########################
 def station_features_fun(station, dict_station):
@@ -109,7 +118,7 @@ def home(request):
     foo()
 
     # ////////////////// Build catchment layer //////////////////
-    # TODO:
+    # TODO: Add catchements
 
     # ////////////////// Build reach layer //////////////////
     reach_map = foo.get_reachgeojson()
@@ -205,6 +214,10 @@ def station_details(request, station_code):
     station_loc = foo.get_station_data()
     station_loc = station_loc.loc[station_loc['id'].astype('str') == station_code].reset_index(drop=True)
 
+    print('')
+    print(station_loc.T)
+    print('')
+
     # //////////// Call rate curve ////////////
     c_gasto_db = foo.get_curvagasto(station_code)
     c_gasto_fun = foo.get_curvagasto_fun(c_gasto_db)
@@ -222,9 +235,6 @@ def station_details(request, station_code):
     # Database load WaterLevel - Historic Observation - from hydroshare
     hHist_db = foo.getHistoricalData(station_code, 'H')
 
-    # Database load Stream Flow - Historic Simulation - from ECMWF StreamFlow model
-    hist_sim = foo.get_historical_simulation(station_loc)
-
     # //////////// Define time series to work ////////////
     qHist = historical_timeserie(original=[qHist_db, qObs_db],
                                  alternative=[hHist_db, hObs_db],
@@ -236,18 +246,25 @@ def station_details(request, station_code):
                                  change_fun=c_gasto_fun,
                                  var_type='H')
 
+    # Database load Stream Flow - Historic Simulation - from ECMWF StreamFlow model
+    hist_sim = foo.get_historical_simulation(station_loc,
+                                             obsData=qHist)
+
+    # Database load Stream Flow - Historic Simulation (short) - from ECMWF StreamFlow model
+    qlast_sim = foo.get_forecast_records(station_loc,
+                                         obsData=qHist,
+                                         simData=hist_sim)
+
     print('')
     print('')
     print('Carga base de datos')
     print('--- demora {0} seg ---'.format(time.time() - start_time))
-
-    # Database load Stream Flow - Historic Simulation (short) - from ECMWF StreamFlow model
-    qlast_sim = foo.get_forecast_records(station_loc, obsData=qHist, simData=hist_sim)
-
     start_time = time.time()
 
     # Database load Stream Flow - Forecast - from ECMWF StreamFlow model
-    qforecMain, qforecFull = foo.get_forecastdata(station_loc, hist_obs=qHist, hist_sim=hist_sim)
+    qforecMain, qforecFull = foo.get_forecastdata(station_loc,
+                                                  hist_obs=qHist,
+                                                  hist_sim=hist_sim)
 
     print('')
     print('')
@@ -259,9 +276,30 @@ def station_details(request, station_code):
     # ////////////
     # Transform stream flow time series to water level time series with rate curve
     # ////////////
+
+    ###################################################
+    ################## JRC ############################
+    ###################################################
+    # hforecFull, hforecMain = foo.extract_waterlevel_forecast(original_ts = [qforecFull, qforecMain],
+    #                                                          hist_sim = hist_sim,
+    #                                                          hist_obs = hHist,
+    #                                                          change_fun = c_gasto_fun)
+
+    # hlastsim = foo.extract_waterlevel_lastsim(original_ts = qlast_sim,
+    #                                           hist_sim = hist_sim,
+    #                                           hist_obs = hHist,
+    #                                           change_fun = c_gasto_fun)
+    ###################################################
+    ################## JRC ############################
+    ###################################################
+
+    # TODO: Add possibility for calc from bias correction
     hforecMain, _, _ = get_Q2H_H2Q(original_ts=qforecMain,
                                    change_fun=c_gasto_fun,
                                    typechange='Q2H')
+
+
+    # TODO: Add possibility for calc from bias correction
     hforecFull, _, _ = get_Q2H_H2Q(original_ts=qforecFull,
                                    change_fun=c_gasto_fun,
                                    typechange='Q2H')
@@ -269,6 +307,7 @@ def station_details(request, station_code):
     # ////////////
     # Transform water level warnings to stream flows warnings with curve rate
     # ////////////
+    # TODO: aff to foo class
     qmaxhist  , _ , _ = get_Q2H_H2Q(original_ts = data2dfserie(station_loc['umaxhis'].values[0]),
                                     change_fun  = c_gasto_fun, typechange='H2Q')
     qroja     , _ , _ = get_Q2H_H2Q(original_ts = data2dfserie(station_loc['uroja'].values[0]),
@@ -284,8 +323,10 @@ def station_details(request, station_code):
     # Transform stream flows forecast simulation (short) to
     # water level simulation with rate curve.
     # ////////////
+    # TODO: Add possibility for calc from bias correction
     hlastsim  , _ , _ = get_Q2H_H2Q(original_ts = qlast_sim,
-                                    change_fun  = c_gasto_fun, typechange='Q2H')
+                                    change_fun  = c_gasto_fun,
+                                    typechange='Q2H')
 
     print('')
     print('')

@@ -1,6 +1,15 @@
 from tethys_sdk.base import TethysAppBase, url_map_maker
 from tethys_sdk.app_settings import CustomSetting
 
+"""
+############################################################
+                         app.py
+############################################################
+__author__  : jrc
+__version__ : Beta 0.1
+__obj__     : Application pyrhon file for tethys data
+__date__    : 01 - sep - 2022
+"""
 
 class Cohyda(TethysAppBase):
     """
@@ -42,7 +51,6 @@ class Cohyda(TethysAppBase):
                 controller = 'cohyda.controllers.search_data'
             ),
         )
-
         return url_maps
 
 

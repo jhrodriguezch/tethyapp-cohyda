@@ -10,6 +10,21 @@ from datetime import datetime
 
 from .auxFun import *
 
+"""
+############################################################
+                      model.py
+############################################################
+__author__  : jrc
+__version__ : Beta 0.1
+__obj__     : Database management fot tethys app
+__date__    : 01 - sep - 2022
+
+__class__   : Read_DataBase
+__functions__ : historical_timeserie
+                last_curvagasto
+                get_Q2H_H2Q
+                data2dfserie
+"""
 
 class Read_DataBase:
     def __init__(self, path_dir):
@@ -21,6 +36,7 @@ class Read_DataBase:
         # Directory with database
         self.path_dir = path_dir
 
+        # TODO: Add call from apy
         # Url for request the data
         self.url_station_loc   = 'http://fews.ideam.gov.co/colombia/data/ReporteTablaEstaciones.csv'
         self.fews_database     = 'http://fews.ideam.gov.co/colombia/'
@@ -75,7 +91,7 @@ class Read_DataBase:
 
         # ---------------- Merge data from stations ----------------
         # var_station = ['id', 'COMID', 'corriente', 'subzona', 'zona', 'cenpoblado', 'municipio', 'depart']
-        var_station = ['id', 'COMID','altitud','DEPARTAMEN',
+        var_station = ['id', 'COMID','DEPARTAMEN',
                        'MUNICIPIO','AREA_OPERA','AREA_HIDRO','ZONA_HIDRO',
                        'CORRIENTE','SUBZONA_HI']
         stat_loc = stat_loc.merge(df_comid_station[var_station],
@@ -127,9 +143,9 @@ class Read_DataBase:
             ensemble_main_forecast : pandas.DataFrame -> Main results of the forecast.
             ensemble_forecast      : pandas.DataFrame -> All results of the forecast.\n
         """
-        station_id = station_data['id']
+        station_id = station_data['id'].values[0]
         try:
-            reach_id = int(station_data['COMID'])
+            reach_id = station_data['COMID'].astype(int).values[0]
         except:
             print('Estación {0} no tiene COMID.'.format(station_id))
             reach_id = None
@@ -300,7 +316,7 @@ class Read_DataBase:
 
 
     @staticmethod
-    def get_historical_simulation(station_data):
+    def get_historical_simulation(station_data, obsData):
         """
         Get historical simulation for ECMWF Streamflow
         Input:
@@ -309,15 +325,30 @@ class Read_DataBase:
             rv           : pandas.DataFrame -> Time series
         """
         try:
-            reach_id = int(station_data['COMID'])
-            return changeGGLOWSColNames(ggs.streamflow.historic_simulation(reach_id))
+            reach_id = station_data['COMID'].astype(int).values[0]
+
         except Exception as e:
-            print('Estación {0} no tiene COMID asociado.'.format(station_id))
+            print('Estación {0} no tiene COMID asociado.'.format(station_data['id'].values[0]))
             print(e)
             print('')
 
             return pd.DataFrame(data={'data': None},
-                                index=np.datetime64('NaT'), )
+                                index=[np.datetime64('NaT')], )
+
+        rv = ggs.streamflow.historic_simulation(reach_id)
+        rv = changeGGLOWSColNames(rv)
+
+        try:
+            rv = getBiasCorrectionHistorical(simData=rv,
+                                             obsData=obsData)
+        except Exception as e:
+            print('No fue posible ejecutarse el método de bias correction.')
+            print(e)
+            print('')
+
+        rv = change_UTC_colombia(rv)
+
+        return rv
 
 
     @staticmethod
@@ -342,14 +373,32 @@ class Read_DataBase:
             return pd.DataFrame(data={'data': None},
                                 index=[np.datetime64('NaT')])
 
-        rv = changeGGLOWSColNames(ggs.streamflow.forecast_records(reach_id))
-
+        rv = ggs.streamflow.forecast_records(reach_id)
+        rv = changeGGLOWSColNames(rv)
         rv = getBiasCorrection(input=rv,
                                simData=simData,
                                obsData=obsData)
+
+        rv = change_UTC_colombia(rv)
+
         return rv
 
 
+    def extract_waterlevel_forecast(self,
+                                    original_ts = None,
+                                    hist_sim = None,
+                                    hist_obs = None,
+                                    change_fun = None):
+        return 0, 0
+
+
+    def extract_waterlevel_lastsim(self,
+                                   original_ts=None,
+                                   hist_sim=None,
+                                   hist_obs=None,
+                                   change_fun=None
+                                   ):
+        return 0
 
 
     # Hiden methods
@@ -451,23 +500,28 @@ class Read_DataBase:
         # -- Get database
         if None != reach_id:
             # Load forecast ensemble
-            ensemble_forecast = changeGGLOWSColNames(ggs.streamflow.forecast_ensembles(reach_id))
+            ensemble_forecast = ggs.streamflow.forecast_ensembles(reach_id)
+            ensemble_forecast = changeGGLOWSColNames(ensemble_forecast)
 
             if hist_obs.shape[0] == 1:
                 print('No fue posible ejecutarse el método de bias correction.')
             else:
                 # Fix with bias correction
-                for ens_col in ensemble_forecast.columns:
-                    ensemble_forecast[ens_col] = getBiasCorrection(ensemble_forecast[ens_col],
-                                                                   hist_sim,
-                                                                   hist_obs)
+                ensemble_forecast = getBiasCorrection(input=ensemble_forecast,
+                                                      simData=hist_sim,
+                                                      obsData=hist_obs)
+
+            ensemble_forecast = change_UTC_colombia(ensemble_forecast)
+
+
+
 
             # Built dataframe with main values of forecast
             ens_forecast_fix = pd.DataFrame()
-            ens_forecast_fix['Maximo pronostico'] = ensemble_forecast.max(axis=1)
-            ens_forecast_fix['Minimo pronostico'] = ensemble_forecast.min(axis=1)
-            ens_forecast_fix['P25 pronostico'] = ensemble_forecast.quantile(0.25, axis=1)
-            ens_forecast_fix['P75 pronostico'] = ensemble_forecast.quantile(0.75, axis=1)
+            ens_forecast_fix['Maximo pronostico']   = ensemble_forecast.max(axis=1)
+            ens_forecast_fix['Minimo pronostico']   = ensemble_forecast.min(axis=1)
+            ens_forecast_fix['P25 pronostico']      = ensemble_forecast.quantile(0.25, axis=1)
+            ens_forecast_fix['P75 pronostico']      = ensemble_forecast.quantile(0.75, axis=1)
             ens_forecast_fix['Promedio pronostico'] = ensemble_forecast.quantile(0.5, axis=1)
 
             return ens_forecast_fix, ensemble_forecast
@@ -529,7 +583,7 @@ class Read_DataBase:
         url_dir = self.fews_database + '/json' + typeData + '/'
         stationFile = '00' + stationID + typeData + 'obs.json'
 
-        # TODO: Add conditional id station id does not exist
+        # TODO: Add conditional id station id does not exists
         return jfews2df(url_dir + stationFile)
 
 

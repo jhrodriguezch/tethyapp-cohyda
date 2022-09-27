@@ -12,6 +12,22 @@ import geoglows as ggs
 from datetime import datetime
 from urllib.request import urlopen
 
+"""
+############################################################
+                      auxFun.py
+############################################################
+__author__  : jrc
+__version__ : Beta 0.1
+__obj__     : Additional functions for model.py in tethys app (mathematical analysis).
+__date__    : 01 - sep - 2022
+
+__functions__ : jfews2df
+                changeGGLOWSColNames
+                hydroShare2df
+                getBiasCorrection
+                getInterpolation
+                
+"""
 
 def jfews2df(url_dir):
     """
@@ -103,6 +119,7 @@ def hydroShare2df(urlDir, dateColName='Datetime', formatDate='%Y-%m-%d'):
                      date_parser=lambda x: datetime.strptime(x, formatDate),
                      index_col=0)\
                     .rename_axis('date')
+
     # Rename column
     rv.rename(columns={rv.columns[0]: 'data'}, inplace=True)
     return rv
@@ -116,32 +133,29 @@ def getBiasCorrection(input, simData, obsData):
         simData : pandas.DataFrame -> Time series
         obsData : pandas.DataFrame -> Time series
     Return:
-        rv : pandas.DataFrame -> Time series
+        rv : pandas.DataFrame      -> Time series
     """
-    # Change pandas.Series to pandas.DataFrame
-
-    df = simData.add_suffix('_sim').join(obsData.add_suffix('_obs'))
-    df.dropna(axis=0, how='any', inplace=True)
-
-    print(df.head(2))
-    print(simData.head(2))
-    print(obsData.head(2))
-    print('')
 
     if type(input) != type(pd.DataFrame()):
-        # warnings.warn('Pandas library does not define a pandas. Serie as dtype Series.object in the 1.4.3 version.')
+        # warnings.warn('Pandas library does not define a
+        # pandas. Serie as dtype Series.object in the 1.4.3 version.')
         input = input.to_frame()
 
+
+
     try:
-        rv = ggs.bias.correct_forecast(input, simData, obsData)
+        rv = ggs.bias.correct_forecast(forecast_data  = input,
+                                       simulated_data = simData,
+                                       observed_data  = obsData)
+        rv = changeGGLOWSColNames(rv)
     except Exception as e:
         print(e)
-        print('Non bias correction apply.')
+        print('No se aplicó la corrección por sesgo - Pronostico.')
         print('')
 
         rv = input
 
-    return changeGGLOWSColNames(rv)
+    return rv
 
 
 def getInterpolation(x: np.array, y: np.array, typeInterpol):
@@ -217,6 +231,7 @@ def getInterpolation(x: np.array, y: np.array, typeInterpol):
             print('Error in potential interpolation')
             print(e)
             print('')
+
             MatPara = [0, 0, 0]
 
         y_sim = MatPara[0] * (x + MatPara[1]) ** MatPara[2]
@@ -233,3 +248,63 @@ def getInterpolation(x: np.array, y: np.array, typeInterpol):
         return [], []
 
 
+def change_UTC_colombia(input_ts,
+                        format_dt = None,
+                        dt_colname = None,
+                        ):
+    """
+    __date__ : 20 - sep
+    Obj: Change the UTC for Colombian data series
+    Input:
+        Input_ts   : pandas.DataFrame      = Time series original
+        dt_colname : str                   = Name of the column with date time
+        format_dt  : str (datetime format) = Format of the column with date time
+    Return:
+        df         : pandas.DataFrame      = Time series fixed
+    """
+    # Copy datadframe
+    df = input_ts.copy()
+
+    if dt_colname == None:
+        # Asserts
+
+        # Main
+        df.index = df.index - pd.Timedelta(hours=5)
+    else:
+
+        # Asserts
+        if not dt_colname in input_ts.columns:
+            print('Does not UTC changed.')
+            return df
+
+        # Main
+        df[dt_colname] = df[dt_colname] - pd.Timedelta(hours=5)
+
+    # Return data
+    return df
+
+
+def getBiasCorrectionHistorical(simData, obsData):
+    """
+    Get bias correction from historical data
+    Input:
+        simData : pandas.DataFrame -> Time series
+        obsData : pandas.DataFrame -> Time series
+    Return:
+        rv : pandas.DataFrame      -> Time series
+    """
+
+    try:
+        print(simData)
+        print(obsData)
+        rv = ggs.bias.correct_historical(simulated_data = simData,
+                                         observed_data = obsData)
+        rv = changeGGLOWSColNames(rv)
+    except Exception as e:
+        print(e)
+        print('No se aplicó la corrección por sesgo. - Historica')
+        print('')
+
+        rv = simData
+
+    return rv
